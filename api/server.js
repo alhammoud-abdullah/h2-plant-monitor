@@ -1,52 +1,96 @@
 const express = require("express");
 const cors = require("cors");
+const { CosmosClient } = require("@azure/cosmos");
 
 const app = express();
 app.use(cors());                     // erlaubt Zugriffe von anderen Adressen (z. B. lokales Dashboard)
 app.use(express.json());             // damit wir JSON im Request-Body lesen können
 app.use(express.static("public"));   // liefert die Dashboard-Dateien aus dem Ordner "public" aus
 
-// Messwerte im Arbeitsspeicher (Datenbank kommt in Etappe 3)
-const measurements = [];
-const MAX_ENTRIES = 1000;   // höchstens so viele Werte behalten, damit der Speicher nicht vollläuft
-let nextId = 1;             // fortlaufende Nummer für jeden Messwert
+// ---------- Speicher: Cosmos DB oder Arbeitsspeicher ----------
+// Sind COSMOS_ENDPOINT und COSMOS_KEY gesetzt, speichern wir in der Datenbank.
+// Sonst (z. B. lokal ohne Zugangsdaten) wie bisher im Arbeitsspeicher.
+
+let container = null;
+
+if (process.env.COSMOS_ENDPOINT && process.env.COSMOS_KEY) {
+  const client = new CosmosClient({
+    endpoint: process.env.COSMOS_ENDPOINT,
+    key: process.env.COSMOS_KEY,
+  });
+  container = client.database("h2monitor").container("measurements");
+  console.log("Speicher: Cosmos DB");
+} else {
+  console.log("Speicher: Arbeitsspeicher (keine Cosmos-Zugangsdaten gesetzt)");
+}
+
+const measurements = [];    // nur benutzt, wenn keine Datenbank verbunden ist
+const MAX_ENTRIES = 1000;   // höchstens so viele Werte im Arbeitsspeicher
 
 // Speichert einen Messwert; wird von POST und vom Demo-Modus benutzt
-function addMeasurement(powerKw, h2Kg, temperatureC) {
+async function addMeasurement(powerKw, h2Kg, temperatureC) {
   const entry = {
-    id: nextId++,
+    id: crypto.randomUUID(),   // eindeutige ID, die Cosmos DB als Text verlangt
+    plantId: "plant-1",        // zu welcher Anlage der Wert gehört (Partition Key)
     timestamp: new Date().toISOString(),
     powerKw,
     h2Kg,
     temperatureC,
   };
-  measurements.push(entry);
-  if (measurements.length > MAX_ENTRIES) {
-    measurements.shift();   // ältesten Wert entfernen
+
+  if (container) {
+    await container.items.create(entry);   // in Cosmos DB speichern
+  } else {
+    measurements.push(entry);
+    if (measurements.length > MAX_ENTRIES) {
+      measurements.shift();                // ältesten Wert entfernen
+    }
   }
   return entry;
 }
 
+// Holt die neuesten 100 Messwerte, älteste zuerst
+async function getMeasurements() {
+  if (container) {
+    const { resources } = await container.items
+      .query("SELECT TOP 100 c.id, c.plantId, c.timestamp, c.powerKw, c.h2Kg, c.temperatureC FROM c ORDER BY c.timestamp DESC")
+      .fetchAll();
+    return resources.reverse();   // umdrehen, damit die Diagramme von links nach rechts laufen
+  }
+  return measurements;
+}
+
+// ---------- API-Endpunkte ----------
+
 // Messwert annehmen (z. B. vom Simulator auf deinem Laptop)
-app.post("/measurements", (req, res) => {
+app.post("/measurements", async (req, res) => {
   const { powerKw, h2Kg, temperatureC } = req.body;
 
   if (powerKw == null || h2Kg == null || temperatureC == null) {
     return res.status(400).json({ error: "powerKw, h2Kg und temperatureC sind Pflicht" });
   }
 
-  const entry = addMeasurement(powerKw, h2Kg, temperatureC);
-  res.status(201).json(entry);
+  try {
+    const entry = await addMeasurement(powerKw, h2Kg, temperatureC);
+    res.status(201).json(entry);
+  } catch (err) {
+    console.error("Fehler beim Speichern:", err.message);
+    res.status(500).json({ error: "Messwert konnte nicht gespeichert werden" });
+  }
 });
 
-// Alle Messwerte ausgeben
-app.get("/measurements", (req, res) => {
-  res.json(measurements);
+// Messwerte ausgeben
+app.get("/measurements", async (req, res) => {
+  try {
+    res.json(await getMeasurements());
+  } catch (err) {
+    console.error("Fehler beim Lesen:", err.message);
+    res.status(500).json({ error: "Messwerte konnten nicht gelesen werden" });
+  }
 });
 
 // ---------- Demo-Modus ----------
 // Ist DEMO_MODE auf "true" gesetzt, erzeugt der Server selbst alle 3 Sekunden Messwerte.
-// So zeigt das Dashboard online immer Live-Daten, auch wenn dein Laptop aus ist.
 
 function randomAround(base, spread) {
   return base + (Math.random() * 2 - 1) * spread;
@@ -67,7 +111,8 @@ if (process.env.DEMO_MODE === "true") {
     const h2Kg = powerKw / efficiency;
     const temperatureC = randomAround(70, 3) + (isAnomaly ? 8 : 0);
 
-    addMeasurement(round(powerKw), round(h2Kg), round(temperatureC));
+    addMeasurement(round(powerKw), round(h2Kg), round(temperatureC))
+      .catch((err) => console.error("Demo-Wert nicht gespeichert:", err.message));
   }, 3000);
 
   console.log("Demo-Modus aktiv: Der Server erzeugt selbst Messwerte");
