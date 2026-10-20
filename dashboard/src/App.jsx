@@ -3,18 +3,16 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
-// Adresse deiner API
+// Beim Entwickeln (npm run dev) die lokale API, online die API auf demselben Server
 const API_URL = import.meta.env.DEV ? "http://localhost:3000/measurements" : "/measurements";
 
 // Ab dieser Effizienz (kWh pro kg) zeigen wir eine Warnung
 const EFFICIENCY_LIMIT = 60;
 
 function App() {
-  // useState = eine Variable, bei deren Änderung React die Seite neu zeichnet
   const [data, setData] = useState([]);
   const [error, setError] = useState(null);
 
-  // useEffect = Code, der beim Start der Seite einmal ausgeführt wird
   useEffect(() => {
     async function load() {
       try {
@@ -35,12 +33,11 @@ function App() {
       }
     }
 
-    load();                               // sofort einmal laden
-    const id = setInterval(load, 3000);   // danach alle 3 Sekunden
-    return () => clearInterval(id);       // aufräumen, wenn die Seite geschlossen wird
+    load();
+    const id = setInterval(load, 3000);
+    return () => clearInterval(id);
   }, []);
 
-  // der neueste Messwert für die Kacheln oben
   const latest = data[data.length - 1];
   const isWarning = latest && latest.efficiency > EFFICIENCY_LIMIT;
 
@@ -69,6 +66,8 @@ function App() {
       <Chart title="H2-Produktion (kg/h)" data={data} dataKey="h2Kg" color="#2e7d32" />
       <Chart title="Stromverbrauch (kW)" data={data} dataKey="powerKw" color="#1565c0" />
       <Chart title="Effizienz (kWh pro kg H2) – niedriger ist besser" data={data} dataKey="efficiency" color="#c62828" />
+
+      <MeasurementTable data={data} />
     </div>
   );
 }
@@ -103,6 +102,44 @@ function Chart({ title, data, dataKey, color }) {
   );
 }
 
+// Tabelle mit den letzten 15 Messwerten, neueste oben; Anomalien rot markiert
+function MeasurementTable({ data }) {
+  const rows = [...data].reverse().slice(0, 15);   // Kopie umdrehen, damit die neuesten oben stehen
+
+  return (
+    <div style={styles.chartBox}>
+      <h3 style={{ marginTop: 0 }}>Letzte Messwerte</h3>
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.th}>Uhrzeit</th>
+            <th style={styles.thNum}>Strom (kW)</th>
+            <th style={styles.thNum}>H2 (kg/h)</th>
+            <th style={styles.thNum}>Effizienz (kWh/kg)</th>
+            <th style={styles.thNum}>Temperatur (°C)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m) => {
+            const warn = m.efficiency > EFFICIENCY_LIMIT;   // auffälliger Wert?
+            return (
+              <tr key={m.id} style={warn ? styles.warnRow : undefined}>
+                <td style={styles.td}>{m.time}</td>
+                <td style={styles.tdNum}>{m.powerKw.toLocaleString("de-DE")}</td>
+                <td style={styles.tdNum}>{m.h2Kg.toLocaleString("de-DE")}</td>
+                <td style={styles.tdNum}>
+                  {m.efficiency.toLocaleString("de-DE")} {warn && "⚠️"}
+                </td>
+                <td style={styles.tdNum}>{m.temperatureC.toLocaleString("de-DE")}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // Aussehen der Elemente
 const styles = {
   cards: {
@@ -112,8 +149,14 @@ const styles = {
     marginBottom: 24,
   },
   card: { background: "white", borderRadius: 8, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" },
-  chartBox: { background: "white", borderRadius: 8, padding: 16, marginBottom: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" },
+  chartBox: { background: "white", borderRadius: 8, padding: 16, marginBottom: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.1)", overflowX: "auto" },
   error: { background: "#ffebee", color: "#c62828", padding: 12, borderRadius: 8, marginBottom: 16 },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
+  th: { textAlign: "left", padding: 8, borderBottom: "2px solid #ddd", color: "#666" },
+  thNum: { textAlign: "right", padding: 8, borderBottom: "2px solid #ddd", color: "#666" },
+  td: { padding: 8, borderBottom: "1px solid #eee" },
+  tdNum: { padding: 8, borderBottom: "1px solid #eee", textAlign: "right", fontVariantNumeric: "tabular-nums" },
+  warnRow: { background: "#ffebee" },
 };
 
 export default App;
