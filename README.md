@@ -1,5 +1,8 @@
 # H2 Plant Monitor
 
+**Live-Demo:** https://h2-plant-monitor-api-abdullah.azurewebsites.net
+*(beim ersten Aufruf nach längerer Pause ca. 30 Sekunden Ladezeit)*
+
 Live-Monitoring-Dashboard für einen simulierten Elektrolyseur, also eine Anlage, die aus Strom Wasserstoff herstellt.
 
 Ein Simulator erzeugt laufend Messwerte (Stromverbrauch, H2-Produktion, Temperatur), eine Node.js-API speichert sie, und ein React-Dashboard zeigt sie live an. Eine einfache Anomalie-Erkennung warnt, wenn die Effizienz der Anlage auffällig schlechter wird.
@@ -8,9 +11,16 @@ Ein Simulator erzeugt laufend Messwerte (Stromverbrauch, H2-Produktion, Temperat
 
 ```mermaid
 flowchart LR
-    S[IoT-Simulator<br/>Node.js] -->|POST /measurements| A[Backend-API<br/>Node.js + Express]
-    D[Web-Dashboard<br/>React + Recharts] -->|GET /measurements| A
+    S[IoT-Simulator<br/>Node.js, lokal] -->|POST /measurements| A
+    subgraph Azure App Service - Frankfurt
+        A[Backend-API<br/>Node.js + Express]
+        DM[Demo-Modus<br/>erzeugt Messwerte] --> A
+        D[Web-Dashboard<br/>React + Recharts]
+    end
+    D -->|GET /measurements| A
 ```
+
+Online erzeugt die API im **Demo-Modus** selbst Messwerte, damit das Dashboard jederzeit Live-Daten zeigt. Lokal kann stattdessen der separate Simulator Daten senden.
 
 ## Tech-Stack
 
@@ -19,6 +29,7 @@ flowchart LR
 | Simulator | Node.js |
 | Backend-API | Node.js, Express |
 | Dashboard | React, Vite, Recharts |
+| Cloud | Microsoft Azure App Service (Region Germany West Central) |
 | Versionsverwaltung | Git, GitHub |
 
 ## Features
@@ -27,6 +38,7 @@ flowchart LR
 - REST-API mit `POST /measurements` und `GET /measurements`
 - Live-Diagramme für H2-Produktion, Stromverbrauch und Effizienz (kWh pro kg H2)
 - Warnung bei auffälliger Effizienz (Schwellenwert: 60 kWh/kg, normal ca. 55)
+- Cloud-Deployment auf Azure mit Demo-Modus über die Umgebungsvariable `DEMO_MODE`
 
 ## Lokal starten
 
@@ -55,5 +67,6 @@ Dashboard öffnen: http://localhost:5173
 ## Roadmap
 
 - [x] Phase 1: Simulator, API und Dashboard lokal
-- [ ] Phase 2: Datenbank und Deployment auf Azure, Power-BI-Bericht
+- [x] Phase 2a: API und Dashboard auf Azure, Demo-Modus
+- [ ] Phase 2b: Datenbank auf Azure, Power-BI-Bericht
 - [ ] Phase 3: Anomalie-Erkennung mit Machine Learning
