@@ -32,6 +32,9 @@ app.get("/measurements", (req, res) => {
   res.json(measurements);
 });
 
-app.listen(3000, () => {
-  console.log("API läuft auf http://localhost:3000");
+// Azure gibt den Port über die Umgebungsvariable PORT vor, lokal nehmen wir 3000
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`API läuft auf Port ${PORT}`);
 });

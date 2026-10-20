@@ -1,5 +1,5 @@
 // Adresse deiner API
-const API_URL = "http://localhost:3000/measurements";
+const API_URL = process.env.API_URL || "http://localhost:3000/measurements";
 // alle 3 Sekunden ein neuer Messwert
 const INTERVAL_MS = 3000;
 
