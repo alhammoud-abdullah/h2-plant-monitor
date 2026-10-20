@@ -4,7 +4,7 @@ import {
 } from "recharts";
 
 // Adresse deiner API
-const API_URL = "http://localhost:3000/measurements";
+const API_URL = import.meta.env.DEV ? "http://localhost:3000/measurements" : "/measurements";
 
 // Ab dieser Effizienz (kWh pro kg) zeigen wir eine Warnung
 const EFFICIENCY_LIMIT = 60;
